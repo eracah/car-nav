@@ -6,7 +6,7 @@ from Box2D.b2 import (edgeShape, circleShape, fixtureDef, polygonShape, revolute
 
 import gym
 from gym import spaces
-from gym.envs.box2d.car_dynamics import Car
+from car_dynamics import Car, FrictionDetector
 from gym.utils import colorize, seeding, EzPickle
 
 import pyglet
@@ -61,44 +61,6 @@ BORDER = 8/SCALE
 BORDER_MIN_COUNT = 4
 
 ROAD_COLOR = [0.4, 0.4, 0.4]
-
-class FrictionDetector(contactListener):
-    def __init__(self, env):
-        contactListener.__init__(self)
-        self.env = env
-    def BeginContact(self, contact):
-        self._contact(contact, True)
-    def EndContact(self, contact):
-        self._contact(contact, False)
-    def _contact(self, contact, begin):
-        tile = None
-        obj = None
-        u1 = contact.fixtureA.body.userData
-        u2 = contact.fixtureB.body.userData
-        if u1 and "road_friction" in u1.__dict__:
-            tile = u1
-            obj  = u2
-        if u2 and "road_friction" in u2.__dict__:
-            tile = u2
-            obj  = u1
-        if not tile:
-            return
-
-        tile.color[0] = ROAD_COLOR[0]
-        tile.color[1] = ROAD_COLOR[1]
-        tile.color[2] = ROAD_COLOR[2]
-        if not obj or "tiles" not in obj.__dict__:
-            return
-        if begin:
-            obj.tiles.add(tile)
-            # print tile.road_friction, "ADD", len(obj.tiles)
-            if not tile.road_visited:
-                tile.road_visited = True
-                self.env.reward += 1000.0/len(self.env.track)
-                self.env.tile_visited_count += 1
-        else:
-            obj.tiles.remove(tile)
-            # print tile.road_friction, "DEL", len(obj.tiles) -- should delete to zero when on grass (this works)
 
 class CarRacing(gym.Env, EzPickle):
     metadata = {
