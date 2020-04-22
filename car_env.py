@@ -6,11 +6,11 @@ from matplotlib import pyplot as plt
 import matplotlib.image as mpimg
 import copy
 
-track_sq = mpimg.imread("./track_piece.png")
-grass_sq = mpimg.imread("./grass_patch.png")
-car = mpimg.imread("./car.png")
-reward_sq = mpimg.imread("./reward.png")
-patch_width, patch_height, rgb = car.shape
+# track_sq = mpimg.imread("./track_piece.png")
+# grass_sq = mpimg.imread("./grass_patch.png")
+# car = mpimg.imread("./car.png")
+# reward_sq = mpimg.imread("./reward.png")
+# patch_width, patch_height, rgb = car.shape
 
 
 def track_ind_to_coords(ind, track_bitmap):
@@ -43,7 +43,9 @@ def track_ind_to_coords(ind, track_bitmap):
 
 def create_track(width=8):
     """Create bit map for the car track.
-    Zeros are valid parts of the track, Ones are the background and are non-bavigabe
+     Zeros are the background and are non-navigable
+     Ones are horizontal pieces
+     Twos are vertical pieces
 
     Arguments:
     ----------
@@ -52,20 +54,73 @@ def create_track(width=8):
             the width of observation space aka the number of columns in the track array (default = 8)
     """
 
-    border = np.ones(width)
-    horiz_track = np.concatenate((np.ones(1, ), np.zeros(width - 2), np.ones(1, )))
-    right_vert = np.concatenate((np.ones(width - 2), np.zeros(1, ), np.ones(1, )))
-    left_vert = np.concatenate((np.ones(1, ), np.zeros(1, ), np.ones(width - 2)))
+    border = np.zeros(width)
+    horiz_track = np.concatenate((np.zeros(1, ), np.ones(width - 2), np.zeros(1, )))
+    right_vert = np.concatenate((np.zeros(width - 2), 2*np.ones(1, ), np.zeros(1, )))
+    left_vert = np.concatenate((np.zeros(1, ), 2*np.ones(1, ), np.zeros(width - 2)))
 
     track_channel = np.stack((border,
                               horiz_track,
                               right_vert,
                               horiz_track,
                               left_vert,
+                              left_vert,
                               horiz_track,
                               border)
                              ).astype(np.int8)
     return track_channel
+
+
+def lay_track(bg, track_bitmap, track_piece):
+    """Lays all the track pieces onto an image in the shape specified by the bitmao
+
+    Arguments:
+        bg (PIL Image): the background image
+        track_bitmap (np.ndarray): array specifying pattern of track and grass
+        track_piece (PIL Image): one primitive track piece
+                                should be size (width_scale_factor, height_scale_factor)
+
+    Basically we loop over the track_bitmap and place track_pieces in places the bitmap specifies
+    """
+    full_bg = bg.copy()
+    bg_w, bg_h = full_bg.size
+    bm_h, bm_w = track_bitmap.shape
+    height_scale_factor, width_scale_factor = bg_h / bm_h, bg_w / bm_w
+    for h in range(bm_h):
+        for w in range(bm_w):
+            hind, wind = int(height_scale_factor * h), int(width_scale_factor * w)
+            if track_bitmap[h, w] == 1:
+                full_bg.paste(track_piece,(wind, hind))
+            elif track_bitmap[h, w] == 2: # vertical piece, so we rotate the image
+                full_bg.paste(track_piece.rotate(90), (wind, hind))
+    return full_bg
+
+
+def create_full_size_bitmap(bg, track_bitmap):
+    """ Makes bitmap the same size as the background image specifying wether each pixel
+        is grass or track
+    Arguments:
+        bg (PIL Image): the background image
+        track_bitmap (np.ndarray): array specifying pattern of track and grass
+
+    Returns:
+        big_bitmap (np.ndarray): array the same size as bg specifying whether a pixel is track or grass
+    """
+
+    full_bg = bg.copy()
+    big_bitmap = np.zeros((full_bg.size[1], full_bg.size[0])) # height and width switched in numpy
+    bg_w, bg_h = full_bg.size
+    bm_h, bm_w = track_bitmap.shape
+    height_scale_factor, width_scale_factor = bg_h / bm_h, bg_w / bm_w
+    for h in range(bm_h):
+        for w in range(bm_w):
+            hind, wind = int(height_scale_factor * h), int(width_scale_factor * w)
+            if track_bitmap[h, w] == 1:
+                big_bitmap[hind:hind+int(height_scale_factor), wind:wind+int(width_scale_factor)] = 1
+            elif track_bitmap[h, w] == 2:  # vertical piece
+                big_bitmap[hind:hind + int(height_scale_factor), wind:wind + int(width_scale_factor)] = 2
+    return big_bitmap
+
 
 
 
@@ -119,78 +174,6 @@ def create_agent_channel(track_bitmap):
     agent_channel = np.zeros_like(track_bitmap)
     agent_channel[agent_start_y, agent_start_x] = 1
     return agent_channel
-
-
-
-
-def stringify(row):
-    """takes 
-
-    Arguments
-    ---------
-    row : array-like
-          3 x track_width array
-          row[0,:] : a row of the track bitmap
-          row[1,:] : a row of the reward bitmap
-          row[2,:] : a rwo of the agent bitmap
-    """
-    track, reward, agent = row
-
-    s = ""
-    for i in range(row.shape[1]):
-        agent_value = agent[i]
-        track_value = track[i]
-        reward_value = reward[i]
-
-        if agent_value == 1:
-            s += "--"
-            continue
-        if reward_value != 0:
-            s += '{:2d}'.format(reward_value)
-            continue
-        if track_value == 0:
-            s += "  "
-        elif track_value == 1:
-            s += "##"
-        else:
-            assert False, "Invalid bitmap values: {}, {},{} ".format(track_value, reward_value, agent_value)
-    return s
-
-
-
-
-def pixelify(row):
-    track, reward, agent = row
-    if len(track[track == 0]) == 1:
-        vertical = True
-    else:
-        vertical = False
-
-    s = []
-    for i in range(row.shape[1]):
-        agent_value = agent[i]
-        track_value = track[i]
-        reward_value = reward[i]
-
-        if agent_value == 1:
-            s.append(car)
-            continue
-        if reward_value != 0:
-            s.append(reward_sq)
-            continue
-        if track_value == 0:
-            if vertical:
-                s.append(track_sq.transpose(1, 0, 2))
-            else:
-                s.append(track_sq)
-
-        elif track_value == 1:
-            s.append(grass_sq)
-        else:
-            assert False, "Invalid bitmap values: {}, {},{} ".format(track_value, reward_value, agent_value)
-    return np.concatenate(s, axis=1)
-
-
 
 
 class CarNav(gym.Env):
