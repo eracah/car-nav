@@ -4,8 +4,9 @@ import copy
 from PIL import Image
 import scipy
 import copy
+import random
 
-from utils import convert_to_power_of_2
+from utils import convert_to_power_of_2, get_as_close_as_you_can
 
 
 class Track(object):
@@ -35,12 +36,7 @@ class Track(object):
         self.road_tile_im = self.get_road_tile_image(road_tile_width, road_tile_height)
         
         # make full track by laying the road tiles in the pattern specified by the bitmap
-        self.image = self.lay_track(self.bg_image, self.track_bitmap, self.road_tile_im)
-
-        # create full size bitmap -> one bit per pixel
-        self.full_bitmap = scipy.ndimage.zoom(self.track_bitmap,
-                                              zoom=(self.height_pixels_per_bit, self.width_pixels_per_bit),
-                                              order=0)
+        self.image, self.full_bitmap = self.lay_track(self.bg_image, self.track_bitmap, self.road_tile_im)
 
 
     def get_all_valid_locations(self, sprite_size):
@@ -53,14 +49,21 @@ class Track(object):
             for x_coord in range(full_bitmap_width):
                 if self.is_valid_location(sprite_size,(x_coord,y_coord)):
                     valid_coords.append((x_coord, y_coord))
-        return valid_coords
+        return np.asarray(valid_coords)
 
 
     def is_valid_location(self, sprite_size, location):
         """Check if placing sprite in location will be valid
             aka will be fully on the track"""
+
+
         sprite_width, sprite_height = sprite_size
         loc_x, loc_y = location
+
+        if loc_x < 0 or loc_y < 0:
+            return False
+        if loc_x > self.image.size[0] or loc_y > self.image.size[1]:
+            return False
 
         # remember numpy arrays are indexed by [y,x] and not [x,y]
         region_of_occupation = self.full_bitmap[loc_y:loc_y + sprite_height, loc_x:loc_x + sprite_width, ]
@@ -147,7 +150,8 @@ class Track(object):
         bitmap_height, bitmap_width = track_bitmap.shape
         road_tile_width, road_tile_height = road_tile_im.size
 
-
+        # create full size bitmap -> one bit per pixel
+        full_bitmap = np.zeros_like(np.asarray(full_track)[:,:,0])
         for bit_x in range(bitmap_height):
             for bit_y in range(bitmap_width):
 
@@ -160,17 +164,64 @@ class Track(object):
                 # place horizontal tile
                 if track_bitmap[bit_y, bit_x] == 1:
                     full_track.paste(road_tile_im, tile_location)
+                    full_bitmap[bg_y_coord : bg_y_coord + road_tile_height,
+                                    bg_x_coord:bg_x_coord + road_tile_width] = 1
 
                 # place vertical tile (rotate horizontal tile)
                 elif track_bitmap[bit_y, bit_x] == 2:
                     full_track.paste(road_tile_im.rotate(90), tile_location)
+                    full_bitmap[bg_y_coord: bg_y_coord + road_tile_height,
+                    bg_x_coord:bg_x_coord + road_tile_width] = 2
 
-        return full_track
+        return full_track, full_bitmap
 
 
+class Car(object):
+    def __init__(self, track, width=32, height=32, step_size=1):
+        self.width = width
+        self.height = height
+        self.size = (self.width, self.height)
+        self.step_size = step_size
+        self.image = Image.open("images/car.png").resize(self.size)
+        self.track = copy.deepcopy(track)
+        self.valid_locations = track.get_all_valid_locations(self.size)
+        self.location = (0, 0)
+        self.reset()
+
+    def reset(self):
+        num_valid_locations = self.valid_locations.shape[0]
+        random_location_ind = np.random.choice(num_valid_locations)
+        self.location = tuple(self.valid_locations[random_location_ind])
+
+    def move(self, direction):
+        if direction == "up":
+            increment = [0, -self.step_size]
+        elif direction == "down":
+            increment = [0, self.step_size]
+        elif direction == "left":
+            increment = [-self.step_size, 0]
+        elif direction == "right":
+            increment = [self.step_size, 0]
+        else:
+            assert False, "{} is an invalid direction".format(direction)
+
+        new_location = tuple(np.asarray(self.location) + increment)
+
+        # if new location is not a valid location on the track
+        # get as close to new location as possible
+        if not self.track.is_valid_location(self.size, new_location):
+            new_location = get_as_close_as_you_can(self.valid_locations,
+                                                    self.location,
+                                                    increment)
+
+        self.location = new_location
 
 
-
+if __name__ == "__main__":
+    track = Track()
+    car = Car(track,step_size=47)
+    for i in range(20):
+        car.move("right")
 
 
 

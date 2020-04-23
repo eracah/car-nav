@@ -3,6 +3,45 @@ from pathlib import Path
 import numpy as np
 
 
+def get_as_close_as_you_can(valid_coordinates, current_coordinates, increment):
+    """increments current coordinates to the valid coordinate that is as close
+     as possible to the coordinate the increment would have caused
+
+     Arguments:
+         valid_coordinates (np.ndarray): 2D array (num_valid_coordinates, 2)
+         current_coordiantes (tuple): current x,y coordinates
+         increment (list or ndarray): size (2,) specifies how to increment each coordinate
+
+     Returns:
+         new_location (tuple): tuple (x,y) of the new_location that gets as close as possible
+
+     """
+    vl = valid_coordinates
+    new_location = np.asarray(current_coordinates) + increment
+
+    # get unit vector of change
+    sign = np.sign(increment)
+    # get index of increment that is unchanging and index that changes
+    static_ind = int(np.array([0, 1])[sign == 0])
+    dynamic_ind = int(np.array([0, 1])[sign != 0])
+
+    # get sign of change (+ or -)
+    dynamic_sign = sign[dynamic_ind]
+    desired_coord = new_location[dynamic_ind]
+
+    # get all potential valid coordinates aka ones that share the same value
+    # as the current location at unchanging coordinate
+    possible_coords = vl[vl[:, static_ind] == new_location[static_ind]]
+    # get index to closest coordinate to desired coordinate in the correct direction of change (using dynamic sign)
+    closest_ind = (dynamic_sign * (desired_coord - possible_coords[:, dynamic_ind])).argmin()
+    # set new location to this coordiante
+    new_location = possible_coords[closest_ind]
+
+    return tuple(new_location)
+
+def find_nearest(array, value):
+    idx = (np.abs(array - value)).argmin()
+    return array[idx]
 
 def convert_to_power_of_2(num):
     log_2_of_num = np.log2(num)
