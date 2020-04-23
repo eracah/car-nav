@@ -4,19 +4,20 @@ import numpy as np
 from PIL import Image
 
 
-def place_sprite(bg, sprite, location):
+def place_sprite(base_image, sprite_image, sprite_location):
     """ places sprite at certain location on bg
 
     Arguments:
-        bg (PIL Image): background image
-        sprite (PIL Image): sprite image (can be RGB or RGBA)
+        base_image (PIL Image): background image
+        sprite_image (PIL Image): sprite image (can be RGB or RGBA)
+        sprite_location (tuple): upper left x,y coords to place sprite
 
     Returns:
         final_im (PIL Image): final image with sprite pasted on it
     """
-    final_im = bg.copy()
-    mask = sprite if sprite.mode == "RGBA" else None
-    final_im.paste(sprite, location, mask=mask)
+    final_im = base_image.copy()
+    mask = sprite_image if sprite_image.mode == "RGBA" else None
+    final_im.paste(sprite_image, sprite_location, mask=mask)
     return final_im
 
 
