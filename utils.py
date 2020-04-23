@@ -1,10 +1,24 @@
-from PIL import Image
 from pathlib import Path
-import numpy as np
 
-def find_nearest(array, value):
-    idx = (np.abs(array - value)).argmin()
-    return array[idx]
+import numpy as np
+from PIL import Image
+
+
+def place_sprite(bg, sprite, location):
+    """ places sprite at certain location on bg
+
+    Arguments:
+        bg (PIL Image): background image
+        sprite (PIL Image): sprite image (can be RGB or RGBA)
+
+    Returns:
+        final_im (PIL Image): final image with sprite pasted on it
+    """
+    final_im = bg.copy()
+    mask = sprite if sprite.mode == "RGBA" else None
+    final_im.paste(sprite, location, mask=mask)
+    return final_im
+
 
 def convert_to_power_of_2(num):
     log_2_of_num = np.log2(num)
@@ -13,7 +27,8 @@ def convert_to_power_of_2(num):
         return num
     else:
         exponent_to_use = np.round(log_2_of_num)
-        return int(2**exponent_to_use)
+        return int(2 ** exponent_to_use)
+
 
 def create_reward_channel(track_bitmap, game_id=0):
     """Create bit map for rewards (map each grid square to a reward).
@@ -42,8 +57,6 @@ def create_reward_channel(track_bitmap, game_id=0):
     return reward_channel
 
 
-
-
 def create_agent_channel(track_bitmap):
     """Create agent position bitmap (all zeros except for where agent is)
 
@@ -64,6 +77,7 @@ def create_agent_channel(track_bitmap):
     agent_channel = np.zeros_like(track_bitmap)
     agent_channel[agent_start_y, agent_start_x] = 1
     return agent_channel
+
 
 def track_ind_to_coords(ind, track_bitmap):
     """Return the x,y coordinates of the track bitmap given an index.
@@ -93,32 +107,12 @@ def track_ind_to_coords(ind, track_bitmap):
     return y, x
 
 
-
-def place_sprite(bg, sprite, location):
-    """ places sprite at certain location on bg
-
-    Arguments:
-        bg (PIL Image): background image
-        sprite (PIL Image): sprite image (can be RGB or RGBA)
-
-    Returns:
-        final_im (PIL Image): final image with sprite pasted on it
-    """
-    final_im = bg.copy()
-    mask = sprite if sprite.mode == "RGBA" else None
-    final_im.paste(sprite, location, mask=mask)
-    return final_im
-
-
-
-
 def make_transparent(im_path):
     """assumes background is white and makes it transparent
 
     Arguments:
         im_path (str): string with path to image with white bg
     """
-
 
     # get save dir by grabbing the parent directory of the image
     save_dir = str(Path(im_path).parent)
@@ -138,7 +132,6 @@ def make_transparent(im_path):
     transparent_pil_im.save(transparent_im_path)
 
 
-
 def add_transparent_bg_to_numpy_im(np_im):
     """takes RGB numpy array and converts white bg to be transparent
 
@@ -154,28 +147,26 @@ def add_transparent_bg_to_numpy_im(np_im):
             and the last channel should be 0 at locations where white bg was
 
     """
-    #first three channels is RGB. if there is a 4th it is alpha, which specifies transparency
+    # first three channels is RGB. if there is a 4th it is alpha, which specifies transparency
     rgb_part = np.copy(np_im[:, :, :3])
 
     # make our own alpha channel (255 is most opaque, 0 is most transparent)
-    alpha = 255*np.ones_like(rgb_part[:,:,0])
+    alpha = 255 * np.ones_like(rgb_part[:, :, 0])
 
     # 255 for R,G,and B is white, so we check which pixels are [255,255,255], which means white
-    white_mask = np.all(rgb_part==255, axis=2)
+    white_mask = np.all(rgb_part == 255, axis=2)
 
     # set the transparency to 100% (alpha = 0) for any white pixels
     alpha[white_mask] = 0
 
     # concat rgb with alpha to create RGBA array
-    alpha = np.expand_dims(alpha,axis=2) # newshape: (h,w,1)
-    rgba_array = np.concatenate((rgb_part,alpha), axis=2)
+    alpha = np.expand_dims(alpha, axis=2)  # newshape: (h,w,1)
+    rgba_array = np.concatenate((rgb_part, alpha), axis=2)
     return rgba_array
+
 
 if __name__ == "__main__":
     import os
+
     print(os.getcwd())
     make_transparent("./images/car.png")
-
-
-
-

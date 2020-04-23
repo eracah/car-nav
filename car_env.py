@@ -1,21 +1,18 @@
+import copy
+
 import gym
 import numpy as np
-import copy
 from PIL import Image
-import scipy
-import copy
-import random
 
 from utils import convert_to_power_of_2, place_sprite
 
 
 class Track(object):
     def __init__(self, width=256, height=256):
-        
         # everything is easier if we use powers of 2
         width = convert_to_power_of_2(width)
         height = convert_to_power_of_2(height)
-        
+
         # height and width of the entire observation
         self.width = width
         self.height = height
@@ -34,10 +31,9 @@ class Track(object):
         # make it so one bit in the track bitmap equals one road tile
         self.road_tile_width, self.road_tile_height = self.width_pixels_per_bit, self.height_pixels_per_bit
         self.road_tile_im = self.get_road_tile_image(self.road_tile_width, self.road_tile_height)
-        
+
         # make full track by laying the road tiles in the pattern specified by the bitmap
         self.image, self.full_bitmap = self.lay_track(self.bg_image, self.track_bitmap, self.road_tile_im)
-
 
     def get_all_valid_locations(self, sprite_size):
         """Loop through entire track and store all valid coordinates that
@@ -47,10 +43,9 @@ class Track(object):
         full_bitmap_height, full_bitmap_width = self.full_bitmap.shape
         for y_coord in range(full_bitmap_height):
             for x_coord in range(full_bitmap_width):
-                if self.is_valid_location(sprite_size,(x_coord,y_coord)):
+                if self.is_valid_location(sprite_size, (x_coord, y_coord)):
                     valid_coords.append((x_coord, y_coord))
         return np.asarray(valid_coords)
-
 
     def is_valid_location(self, sprite_size, location):
         """Check if placing sprite in location will be valid
@@ -71,14 +66,13 @@ class Track(object):
         sprite_width, sprite_height = sprite_size
         loc_x, loc_y = location
         # remember numpy arrays are indexed by [y,x] and not [x,y]
-        region_of_occupation = self.full_bitmap[loc_y:loc_y + sprite_height, loc_x:loc_x + sprite_width ]
+        region_of_occupation = self.full_bitmap[loc_y:loc_y + sprite_height, loc_x:loc_x + sprite_width]
         return region_of_occupation
 
     def is_sprite_location_vertical(self, sprite_size, location):
         region_of_occupation = self.get_region_of_occupation(sprite_size, location)
         is_vertical = np.any(region_of_occupation == 2)
         return is_vertical
-
 
     def compute_pixels_per_bit(self):
         """Computes how many pixels each bit of the track bit map represent"""
@@ -95,9 +89,6 @@ class Track(object):
 
         return width_pixels_per_bit, height_pixels_per_bit
 
-
-
-
     def create_track_bitmap(self, width=8):
         """Create bit map for the car track.
          Zeros are the background and are non-navigable
@@ -113,35 +104,33 @@ class Track(object):
 
         border = np.zeros(width)
         horiz_track = np.concatenate((np.zeros(1, ), np.ones(width - 2), np.zeros(1, )))
-        right_vert = np.concatenate((np.zeros(width - 2), 2*np.ones(1, ), np.zeros(1, )))
-        left_vert = np.concatenate((np.zeros(1, ), 2*np.ones(1, ), np.zeros(width - 2)))
+        right_vert = np.concatenate((np.zeros(width - 2), 2 * np.ones(1, ), np.zeros(1, )))
+        left_vert = np.concatenate((np.zeros(1, ), 2 * np.ones(1, ), np.zeros(width - 2)))
 
         track_bitmap = np.stack((border,
-                                  horiz_track,
-                                  right_vert,
-                                  horiz_track,
-                                  left_vert,
-                                  left_vert,
-                                  horiz_track,
-                                  border)
-                                 ).astype(np.int8)
+                                 horiz_track,
+                                 right_vert,
+                                 horiz_track,
+                                 left_vert,
+                                 left_vert,
+                                 horiz_track,
+                                 border)
+                                ).astype(np.int8)
         return track_bitmap
-
 
     def get_background_image(self, width, height):
         """Load PIL image from disk for the background"""
 
         bg_image = Image.open("images/background.png")
-        bg_image = bg_image.resize( (width, height))
+        bg_image = bg_image.resize((width, height))
         return bg_image
 
     def get_road_tile_image(self, width, height):
         """Load PIL image from disk for a track piece"""
         road_tile_im = Image.open("images/road_tile.png")
         road_tile_im = road_tile_im.resize((width, height))
-        road_tile_im = road_tile_im.rotate(90) # rotate to make horizontal
+        road_tile_im = road_tile_im.rotate(90)  # rotate to make horizontal
         return road_tile_im
-
 
     def lay_track(self, bg_im, track_bitmap, road_tile_im):
         """Lays all the track pieces onto an image in the shape specified by the bitmao
@@ -161,7 +150,7 @@ class Track(object):
         road_tile_width, road_tile_height = road_tile_im.size
 
         # create full size bitmap -> one bit per pixel
-        full_bitmap = np.zeros_like(np.asarray(full_track)[:,:,0])
+        full_bitmap = np.zeros_like(np.asarray(full_track)[:, :, 0])
         for bit_x in range(bitmap_height):
             for bit_y in range(bitmap_width):
 
@@ -174,8 +163,8 @@ class Track(object):
                 # place horizontal tile
                 if track_bitmap[bit_y, bit_x] == 1:
                     full_track.paste(road_tile_im, tile_location)
-                    full_bitmap[bg_y_coord : bg_y_coord + road_tile_height,
-                                    bg_x_coord:bg_x_coord + road_tile_width] = 1
+                    full_bitmap[bg_y_coord: bg_y_coord + road_tile_height,
+                    bg_x_coord:bg_x_coord + road_tile_width] = 1
 
                 # place vertical tile (rotate horizontal tile)
                 elif track_bitmap[bit_y, bit_x] == 2:
@@ -203,12 +192,11 @@ class Car(object):
 
     def _get_start_location(self):
         num_valid_locations = self.valid_locations.shape[0]
-        location_ind = num_valid_locations // 2 #np.random.choice(num_valid_locations)
+        location_ind = num_valid_locations // 2  # np.random.choice(num_valid_locations)
         location = tuple(self.valid_locations[location_ind])
         return location
 
-
-    def _move(self,location, direction, step_size):
+    def _move(self, location, direction, step_size):
         cur_x, cur_y = location
         new_x, new_y = copy.deepcopy(cur_x), copy.deepcopy(cur_y)
         if direction == "up":
@@ -224,7 +212,6 @@ class Car(object):
 
         return (new_x, new_y)
 
-
     def get_as_close_as_you_can(self, direction):
         """"inch forward with size 1 steps until you reach the end of valid track"""
         new_location = self.location
@@ -236,7 +223,6 @@ class Car(object):
             steps += 1
         return new_location
 
-
     def move(self, direction):
         new_location = self._move(self.location, direction, self.step_size)
 
@@ -245,7 +231,6 @@ class Car(object):
         if not self.track.is_valid_location(self.size, new_location):
             new_location = self.get_as_close_as_you_can(direction)
 
-
         # rotate sprite if transitioning from horizontal to vertical or vice versa
         before_is_vertical = self.track.is_sprite_location_vertical(self.size, self.location)
         after_is_vertical = self.track.is_sprite_location_vertical(self.size, new_location)
@@ -253,8 +238,6 @@ class Car(object):
             self.image = self.image.rotate(90)
 
         self.location = new_location
-
-
 
 
 class CarNav(gym.Env):
@@ -269,17 +252,14 @@ class CarNav(gym.Env):
         car_width, car_height = self.track.road_tile_width, self.track.road_tile_height
         self.car = Car(self.track, width=car_width, height=car_height, step_size=step_size)
 
-
         self.action_space = gym.spaces.Discrete(4)
         self.action_meanings = ["up", "down", "left", "right"]
 
         self.done = False
 
         self.valid_track_positions = self.track.get_all_valid_locations(self.car.size)
-        self.top_left_pos, self.bottom_right_pos = tuple(self.valid_track_positions[0]),\
+        self.top_left_pos, self.bottom_right_pos = tuple(self.valid_track_positions[0]), \
                                                    tuple(self.valid_track_positions[-1])
-
-
 
     def _get_obs(self):
         obs = place_sprite(self.track.image, self.car.image, self.car.location)
@@ -297,7 +277,6 @@ class CarNav(gym.Env):
             reward = 0
         return reward
 
-
     def _is_done(self):
         if self.car.location == self.top_left_pos or self.car.location == self.bottom_right_pos:
             done = True
@@ -305,13 +284,11 @@ class CarNav(gym.Env):
             done = False
         return done
 
-
     def reset(self):
         self.done = False
         self.car.reset()
         obs = self._get_obs()
         return obs
-
 
     def step(self, action):
         if self.done:
