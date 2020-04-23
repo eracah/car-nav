@@ -6,7 +6,7 @@ import scipy
 import copy
 import random
 
-from utils import convert_to_power_of_2, get_as_close_as_you_can
+from utils import convert_to_power_of_2, place_sprite
 
 
 class Track(object):
@@ -32,8 +32,8 @@ class Track(object):
 
         # get the image for a road tile
         # make it so one bit in the track bitmap equals one road tile
-        road_tile_width, road_tile_height = self.width_pixels_per_bit, self.height_pixels_per_bit
-        self.road_tile_im = self.get_road_tile_image(road_tile_width, road_tile_height)
+        self.road_tile_width, self.road_tile_height = self.width_pixels_per_bit, self.height_pixels_per_bit
+        self.road_tile_im = self.get_road_tile_image(self.road_tile_width, self.road_tile_height)
         
         # make full track by laying the road tiles in the pattern specified by the bitmap
         self.image, self.full_bitmap = self.lay_track(self.bg_image, self.track_bitmap, self.road_tile_im)
@@ -190,110 +190,115 @@ class Car(object):
 
     def reset(self):
         num_valid_locations = self.valid_locations.shape[0]
-        random_location_ind = np.random.choice(num_valid_locations)
-        self.location = tuple(self.valid_locations[random_location_ind])
+        location_ind = num_valid_locations // 2 #np.random.choice(num_valid_locations)
+        self.location = tuple(self.valid_locations[location_ind])
 
-    def move(self, direction):
+
+    def _move(self,location, direction, step_size):
+        cur_x, cur_y = location
+        new_x, new_y = copy.deepcopy(cur_x), copy.deepcopy(cur_y)
         if direction == "up":
-            increment = [0, -self.step_size]
+            new_y -= step_size
         elif direction == "down":
-            increment = [0, self.step_size]
+            new_y += step_size
         elif direction == "left":
-            increment = [-self.step_size, 0]
+            new_x -= step_size
         elif direction == "right":
-            increment = [self.step_size, 0]
+            new_x += step_size
         else:
             assert False, "{} is an invalid direction".format(direction)
 
-        new_location = tuple(np.asarray(self.location) + increment)
+        return (new_x, new_y)
+
+
+    def get_as_close_as_you_can(self, direction):
+        """"inch forward with size 1 steps until you reach the end of valid track"""
+        new_location = self.location
+        trial_location = self.location
+        steps = 0
+        while self.track.is_valid_location(self.size, trial_location) and steps <= self.step_size:
+            new_location = copy.deepcopy(trial_location)
+            trial_location = self._move(new_location, direction, step_size=1)
+            steps += 1
+        return new_location
+
+
+    def move(self, direction):
+        new_location = self._move(self.location, direction, self.step_size)
 
         # if new location is not a valid location on the track
         # get as close to new location as possible
         if not self.track.is_valid_location(self.size, new_location):
-            new_location = get_as_close_as_you_can(self.valid_locations,
-                                                    self.location,
-                                                    increment)
+            new_location = self.get_as_close_as_you_can(direction)
 
         self.location = new_location
 
 
-if __name__ == "__main__":
-    track = Track()
-    car = Car(track,step_size=47)
-    for i in range(20):
-        car.move("right")
+
+
+class CarNav(gym.Env):
+    def __init__(self, width=256, height=256, step_size=10, game_id=0):
+        self.width = width
+        self.height = height
+        self.game_id = game_id
+
+        self.track = Track(width, height)
+
+        # make car same size as each road tile which is the size observation size / 8
+        car_width, car_height = self.track.road_tile_width, self.track.road_tile_height
+        self.car = Car(self.track, width=car_width, height=car_height, step_size=step_size)
+
+
+        self.action_space = gym.spaces.Discrete(4)
+        self.action_meanings = ["up", "down", "left", "right"]
+
+        self.done = False
+
+        self.valid_track_positions = self.track.get_all_valid_locations(self.car.size)
+        self.top_left_pos, self.bottom_right_pos = tuple(self.valid_track_positions[0]),\
+                                                   tuple(self.valid_track_positions[-1])
 
 
 
+    def _get_obs(self):
+        obs = place_sprite(self.track.image, self.car.image, self.car.location)
+        return np.asarray(obs)
+
+    def _get_reward(self):
+        if self.car.location == self.top_left_pos:
+            if self.game_id == 0:
+                reward = 4
+            else:
+                reward = 0
+        elif self.car.location == self.bottom_right_pos:
+            reward = 2
+        else:
+            reward = 0
+        return reward
 
 
+    def _is_done(self):
+        if self.car.location == self.top_left_pos or self.car.location == self.bottom_right_pos:
+            done = True
+        else:
+            done = False
+        return done
 
 
+    def reset(self):
+        self.done = False
+        self.car.reset()
+        obs = self._get_obs()
+        return obs
 
-#
-# class CarNav(gym.Env):
-#     def __init__(self, width=8, game_id=0):
-#         self.width = width
-#         self.game_id = game_id
-#         self.track = create_track(self.width)
-#         self.height = self.track.shape[0]
-#         self.reward = create_reward_channel(track_bitmap=self.track, game_id=self.game_id)
-#         self.agent = create_agent_channel(track_bitmap=self.track)
-#
-#         self.action_space = gym.spaces.Discrete(4)
-#         self.UP, self.DOWN, self.LEFT, self.RIGHT = range(4)
-#         self.x_coords, self.y_coords = np.meshgrid(np.arange(self.width),
-#                                                    np.arange(self.height))
-#         self.done = False
-#
-#     def _get_agent_pos(self):
-#         agent_x = int(self.x_coords[self.agent == 1])
-#         agent_y = int(self.y_coords[self.agent == 1])
-#         return agent_y, agent_x
-#
-#     def _str_obs(self):
-#         full_track = np.stack((self.track, self.reward, self.agent), axis=1)
-#         str_array = [stringify(row) for row in full_track]
-#         return str_array
-#
-#     def _array_obs(self):
-#         full_track = np.stack((self.track, self.reward, self.agent), axis=1)
-#         pixel_array = [pixelify(row) for row in full_track]
-#         return np.concatenate(pixel_array)
-#
-#     def __str__(self):
-#         str_array = self._array_obs()
-#         str_rep = "\n".join([row for row in str_array])
-#         return str_rep
-#
-#     def reset(self):
-#         self.done = False
-#         self.reward = create_reward_channel(track_bitmap=self.track, game_id=self.game_id)
-#         self.agent = create_agent_channel(track_bitmap=self.track)
-#         return self._array_obs()
-#
-#     def step(self, action):
-#         reward = 0
-#         if self.done:
-#             return self._array_obs(), reward, self.done, {}
-#         cur_agent_y, cur_agent_x = self._get_agent_pos()
-#         new_agent_y, new_agent_x = copy.deepcopy(cur_agent_y), copy.deepcopy(cur_agent_x)
-#         if action == self.UP:
-#             new_agent_y -= 1
-#         elif action == self.DOWN:
-#             new_agent_y += 1
-#         elif action == self.RIGHT:
-#             new_agent_x += 1
-#         elif action == self.LEFT:
-#             new_agent_x -= 1
-#         else:
-#             assert False, "{} is an invalid action".format(action)
-#
-#         if self.track[new_agent_y, new_agent_x] == 0:
-#             self.agent[new_agent_y, new_agent_x] = 1
-#             self.agent[cur_agent_y, cur_agent_x] = 0
-#             reward = self.reward[new_agent_y, new_agent_x]
-#             if reward > 0:
-#                 self.done = True
-#
-#         return self._array_obs(), reward, self.done, {}
+
+    def step(self, action):
+        if self.done:
+            return self._get_obs(), 0, self.done, {}
+        action_str = self.action_meanings[action]
+        self.car.move(action_str)
+        obs = self._get_obs()
+        reward = self._get_reward()
+        self.done = self._is_done()
+
+        return obs, reward, self.done, {}
