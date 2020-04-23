@@ -56,8 +56,6 @@ class Track(object):
         """Check if placing sprite in location will be valid
             aka will be fully on the track"""
 
-
-        sprite_width, sprite_height = sprite_size
         loc_x, loc_y = location
 
         if loc_x < 0 or loc_y < 0:
@@ -65,10 +63,22 @@ class Track(object):
         if loc_x > self.image.size[0] or loc_y > self.image.size[1]:
             return False
 
-        # remember numpy arrays are indexed by [y,x] and not [x,y]
-        region_of_occupation = self.full_bitmap[loc_y:loc_y + sprite_height, loc_x:loc_x + sprite_width, ]
+        region_of_occupation = self.get_region_of_occupation(sprite_size, location)
         is_valid = np.all(region_of_occupation)
         return is_valid
+
+    def get_region_of_occupation(self, sprite_size, location):
+        sprite_width, sprite_height = sprite_size
+        loc_x, loc_y = location
+        # remember numpy arrays are indexed by [y,x] and not [x,y]
+        region_of_occupation = self.full_bitmap[loc_y:loc_y + sprite_height, loc_x:loc_x + sprite_width ]
+        return region_of_occupation
+
+    def is_sprite_location_vertical(self, sprite_size, location):
+        region_of_occupation = self.get_region_of_occupation(sprite_size, location)
+        is_vertical = np.any(region_of_occupation == 2)
+        return is_vertical
+
 
     def compute_pixels_per_bit(self):
         """Computes how many pixels each bit of the track bit map represent"""
@@ -185,13 +195,17 @@ class Car(object):
         self.image = Image.open("images/car.png").resize(self.size)
         self.track = copy.deepcopy(track)
         self.valid_locations = track.get_all_valid_locations(self.size)
-        self.location = (0, 0)
-        self.reset()
+        self.location = self._get_start_location()
 
     def reset(self):
+        self.location = self._get_start_location()
+        self.image = Image.open("images/car.png").resize(self.size)
+
+    def _get_start_location(self):
         num_valid_locations = self.valid_locations.shape[0]
         location_ind = num_valid_locations // 2 #np.random.choice(num_valid_locations)
-        self.location = tuple(self.valid_locations[location_ind])
+        location = tuple(self.valid_locations[location_ind])
+        return location
 
 
     def _move(self,location, direction, step_size):
@@ -230,6 +244,13 @@ class Car(object):
         # get as close to new location as possible
         if not self.track.is_valid_location(self.size, new_location):
             new_location = self.get_as_close_as_you_can(direction)
+
+
+        # rotate sprite if transitioning from horizontal to vertical or vice versa
+        before_is_vertical = self.track.is_sprite_location_vertical(self.size, self.location)
+        after_is_vertical = self.track.is_sprite_location_vertical(self.size, new_location)
+        if before_is_vertical != after_is_vertical:
+            self.image = self.image.rotate(90)
 
         self.location = new_location
 
