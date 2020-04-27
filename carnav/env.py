@@ -366,7 +366,8 @@ class CarNav(gym.Env):
         obs = place_sprite(base_image=self.track.image,
                            sprite_image=self.car.image,
                            sprite_location=self.car.location)
-        return np.asarray(obs)
+        obs_rgb = obs.convert('RGB')
+        return np.asarray(obs_rgb)
 
     def _get_reward(self):
         car_region = self.track.get_sprite_region_of_occupation(self.car.size, self.car.location)
