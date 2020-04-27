@@ -1,1 +1,3 @@
-include images/*.png
+include carnav/images/background.png
+include carnav/images/car.png
+include carnav/images/road_tile.png
