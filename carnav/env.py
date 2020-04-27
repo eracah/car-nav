@@ -288,7 +288,7 @@ class Car(object):
         self.size = (self.width, self.height)
         self.step_size = step_size
         self.image = Image.open(str(IMAGE_DIR / Path("car.png"))).resize(self.size)
-        self.track = copy.deepcopy(track)
+        self.track = track
         self.valid_locations = track.get_all_valid_locations_for_sprite(self.size)
         self.location = (0, 0)
 
