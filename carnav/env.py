@@ -1,16 +1,19 @@
 import copy
-
 import gym
 import numpy as np
 from PIL import Image
 from matplotlib import pyplot as plt
-
-from utils import convert_to_power_of_2, place_sprite
+import sys
+from pathlib import Path
+from .utils import convert_to_power_of_2, place_sprite
 
 NO_ROAD = 0
 HORIZONTAL = 1
 VERTICAL = 2
 
+
+THIS_DIR = Path(sys.modules[__name__].__file__).parent
+IMAGE_DIR = THIS_DIR / Path("images")
 
 class Track(object):
     def __init__(self, width=256, height=256, game_id=0):
@@ -134,13 +137,15 @@ class Track(object):
     def get_background_image(self, width, height):
         """Load PIL image from disk for the background"""
 
-        bg_image = Image.open("images/background.png")
+        bg_image_path = str(IMAGE_DIR / Path("background.png"))
+        bg_image = Image.open(bg_image_path)
         bg_image = bg_image.resize((width, height))
         return bg_image
 
     def get_road_tile_image(self, width, height):
         """Load PIL image from disk for a track piece"""
-        road_tile_im = Image.open("images/road_tile.png")
+        road_tile_im_path = str(IMAGE_DIR / Path("road_tile.png"))
+        road_tile_im = Image.open(road_tile_im_path)
         road_tile_im = road_tile_im.resize((width, height))
         road_tile_im = road_tile_im.rotate(90)  # rotate to make horizontal
         return road_tile_im
@@ -282,14 +287,14 @@ class Car(object):
         self.height = height
         self.size = (self.width, self.height)
         self.step_size = step_size
-        self.image = Image.open("images/car.png").resize(self.size)
+        self.image = Image.open(str(IMAGE_DIR / Path("car.png"))).resize(self.size)
         self.track = copy.deepcopy(track)
         self.valid_locations = track.get_all_valid_locations_for_sprite(self.size)
         self.location = (0, 0)
 
     def reset(self, location):
         self.location = copy.deepcopy(location)
-        self.image = Image.open("images/car.png").resize(self.size)
+        self.image = Image.open(str(IMAGE_DIR / Path("car.png"))).resize(self.size)
 
     def _move(self, location, direction, step_size):
         cur_x, cur_y = location
