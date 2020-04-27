@@ -2,7 +2,8 @@ from setuptools import find_packages, setup
 
 setup(
     name='carnav',
-    packages=find_packages(),
+    packages=['carnav'],
     version='0.0.1',
+    include_package_data=True,
     install_requires=['gym', 'numpy', 'pillow', 'scipy', 'matplotlib']
 )
