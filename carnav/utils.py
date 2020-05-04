@@ -4,6 +4,9 @@ import numpy as np
 from PIL import Image
 
 
+
+
+
 def place_sprite(base_image, sprite_image, sprite_location):
     """ places sprite at certain location on bg
 
@@ -29,84 +32,6 @@ def convert_to_power_of_2(num):
     else:
         exponent_to_use = np.round(log_2_of_num)
         return int(2 ** exponent_to_use)
-
-
-def create_reward_channel(track_bitmap, game_id=0):
-    """Create bit map for rewards (map each grid square to a reward).
-
-    Arguments:
-    ----------
-
-    track_bitmap : array-like
-                    bitmap of the track
-    game_id : int
-              id of game if 0 then top left reward is 10, if the id is 1 then it is 0
-
-    """
-
-    height = track_bitmap.shape[0]
-    reward_channel = np.zeros_like(track_bitmap)
-
-    # the x,y coordinate of the first (top left) moveable grid square (aka the top left part of the track) and the bottom right one
-    top_left_y, top_left_x = track_ind_to_coords(0, track_bitmap)
-    bottom_right_y, bottom_right_x = track_ind_to_coords(-1, track_bitmap)
-
-    # make top left part of track have reward 10 and bottom right have reward of 1
-    reward_channel[top_left_y, top_left_x] = 10 if game_id == 0 else 0
-    reward_channel[bottom_right_y, bottom_right_x] = 1
-
-    return reward_channel
-
-
-def create_agent_channel(track_bitmap):
-    """Create agent position bitmap (all zeros except for where agent is)
-
-    Arguments:
-    ----------
-
-    track_bitmap : array-like
-                    bitmap of the track
-
-    """
-
-    # the agent will be set to be in the middle of the track
-    num_track_positions = len(track_bitmap[track_bitmap == 0])
-    agent_start_ind = num_track_positions // 2  # np.random.choice(num_track_positions)
-    agent_start_y, agent_start_x = track_ind_to_coords(agent_start_ind, track_bitmap)
-
-    # set all grid squares to zero except the one where the agent is
-    agent_channel = np.zeros_like(track_bitmap)
-    agent_channel[agent_start_y, agent_start_x] = 1
-    return agent_channel
-
-
-def track_ind_to_coords(ind, track_bitmap):
-    """Return the x,y coordinates of the track bitmap given an index.
-    The track has a finite number of naviagble grid squares, so if we count them starting from the top left,
-    then we can enumerate each valid grid square with an index
-    This function converts that index to the corresponding x,y coordinate in the track bitmap
-
-    Arguments:
-    ----------
-
-    ind : int
-          the index of the grid square on the track (counting from top left and moving right and down)
-
-    track_bitmap : 2D array-like
-                  the bitmap (2D array) corresponding to the track
-    """
-
-    valid_track_value = 0
-    height, width = track_bitmap.shape
-
-    # create arrays of all possible coordinates in the track
-    x_coord, y_coord = np.meshgrid(np.arange(width),
-                                   np.arange(height))
-    # of the coordina
-    y, x = y_coord[track_bitmap == valid_track_value][ind], \
-           x_coord[track_bitmap == valid_track_value][ind]
-    return y, x
-
 
 def make_transparent(im_path):
     """assumes background is white and makes it transparent

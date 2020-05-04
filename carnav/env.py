@@ -5,7 +5,7 @@ from PIL import Image
 from matplotlib import pyplot as plt
 import sys
 from pathlib import Path
-from .utils import convert_to_power_of_2, place_sprite
+from carnav.utils import convert_to_power_of_2, place_sprite
 
 NO_ROAD = 0
 HORIZONTAL = 1
@@ -16,7 +16,9 @@ THIS_DIR = Path(sys.modules[__name__].__file__).parent
 IMAGE_DIR = THIS_DIR / Path("images")
 
 class Track(object):
-    def __init__(self, width=256, height=256, game_id=0):
+    def __init__(self, width=256, height=256, game_id=0, track_pattern="2"):
+
+        self.track_pattern = track_pattern
         # everything is easier if we use powers of 2
         width = convert_to_power_of_2(width)
         height = convert_to_power_of_2(height)
@@ -29,7 +31,7 @@ class Track(object):
 
         # this is the high level design of the track
         # (0's for bg, 1's for horizontal track, 2's for vertical track)
-        self.track_bitmap = self.create_track_bitmap()
+        self.track_bitmap = self.create_track_bitmap(track_pattern=self.track_pattern)
         self.num_road_tiles = np.sum(self.track_bitmap != NO_ROAD)
 
         # the image for the background (solid green for now)
@@ -44,9 +46,11 @@ class Track(object):
         self.road_tile_im = self.get_road_tile_image(self.road_tile_width, self.road_tile_height)
 
         # make full track by laying the road tiles in the pattern specified by the bitmap
-        self.image, self.full_bitmap, self.reward_bitmap, self.done_bitmap = self.lay_track(self.bg_image,
-                                                                                            self.track_bitmap,
-                                                                                            self.road_tile_im)
+        self.image, self.full_bitmap, self.reward_bitmap = self.lay_track(self.bg_image,
+                                                                          self.track_bitmap,
+                                                                          self.road_tile_im)
+        # we are done if we get a reward
+        self.done_bitmap = (self.reward_bitmap != 0)
 
     def get_all_valid_locations_for_sprite(self, sprite_size):
         """Loop through entire track and store all valid coordinates that
@@ -105,7 +109,7 @@ class Track(object):
 
         return width_pixels_per_bit, height_pixels_per_bit
 
-    def create_track_bitmap(self, width=8):
+    def create_track_bitmap(self,track_pattern="2"):
         """Create bit map for the car track.
          Zeros are the background and are non-navigable
          Ones are horizontal pieces
@@ -116,22 +120,51 @@ class Track(object):
 
         width : int
                 the width of observation space aka the number of columns in the track array (default = 8)
+
+        road_pattern : str
+                the pattern of the road
+                choices:
+                    2 : a two shape (a digital clock 2) (horizontal track, right vertical, horiz, left vertical, horiz)
+                    - : a horizontal road
+                    ~1 : a vertical road~
+
+
         """
 
-        border = np.zeros(width)
-        horiz_track = np.concatenate((np.zeros(1, ), HORIZONTAL * np.ones(width - 2), np.zeros(1, )))
-        right_vert = np.concatenate((np.zeros(width - 2), VERTICAL * np.ones(1, ), np.zeros(1, )))
-        left_vert = np.concatenate((np.zeros(1, ), VERTICAL * np.ones(1, ), np.zeros(width - 2)))
+        if track_pattern == "2":
+            width = 7
+            border = np.zeros(width)
+            horiz_track = np.concatenate((np.zeros(1, ), HORIZONTAL * np.ones(width - 2), np.zeros(1, )))
+            right_vert = np.concatenate((np.zeros(width - 2), VERTICAL * np.ones(1, ), np.zeros(1, )))
+            left_vert = np.concatenate((np.zeros(1, ), VERTICAL * np.ones(1, ), np.zeros(width - 2)))
+            track_bitmap = np.stack((border,
+                                     horiz_track,
+                                     right_vert,
+                                     horiz_track,
+                                     left_vert,
+                                     horiz_track,
+                                     border)
+                                    ).astype(np.int8)
+        elif track_pattern == "-":
+            width = 3
+            border = np.zeros(width)
+            horiz_track = HORIZONTAL * np.ones(width)
+            track_bitmap = np.stack((border,
+                                     horiz_track,
+                                     border)
+                                    ).astype(np.int8)
+        # elif track_pattern == "1":
+        #     width = 3
+        #     border = np.zeros(width)
+        #     center_vert = np.concatenate((np.zeros(1,), VERTICAL * np.ones(1, ), np.zeros(1,)))
+        #     track_bitmap = np.stack((center_vert,
+        #                              center_vert,
+        #                              center_vert,)
+        #                             ).astype(np.int8)
+        else:
+            assert False, print(" \"{}\" is not a valid pattern".format(track_pattern))
 
-        track_bitmap = np.stack((border,
-                                 horiz_track,
-                                 right_vert,
-                                 horiz_track,
-                                 left_vert,
-                                 left_vert,
-                                 horiz_track,
-                                 border)
-                                ).astype(np.int8)
+
         return track_bitmap
 
     def get_background_image(self, width, height):
@@ -174,9 +207,8 @@ class Track(object):
         # create full size bitmap -> one bit per pixel
         full_bitmap = np.zeros_like(np.asarray(track_im)[:, :, 0])
         reward_bitmap = np.zeros_like(np.asarray(track_im)[:, :, 0])
-        done_bitmap = np.zeros_like(np.asarray(track_im)[:, :, 0])
-        for bit_x in range(bitmap_height):
-            for bit_y in range(bitmap_width):
+        for bit_y in range(bitmap_height):
+            for bit_x in range(bitmap_width):
                 tile_type = track_bitmap[bit_y, bit_x]
 
                 # if a road tile belongs in this location
@@ -197,37 +229,16 @@ class Track(object):
 
                     # designate reward if needed in this location
                     reward_bitmap = self.place_reward(reward_bitmap, tile_count, tile_region)
-                    done_bitmap = self.update_done_bitmap(done_bitmap, tile_count, tile_region)
-
                     tile_count += 1
 
-        return track_im, full_bitmap, reward_bitmap, done_bitmap
 
-    def update_done_bitmap(self, done_bitmap, tile_count, tile_region):
-        """Add reward to the reward bitmap"""
-        tile_geographic_index = self.get_tile_geographic_index(tile_count)
-        y_region, x_region = tile_region
-        if tile_geographic_index == "upper_left":
-            # the whole left part of the upper left tile
-            # every y location and the left most x location
-            terminal_region = np.s_[y_region, x_region.start]
-            done_bitmap[terminal_region] = 1
+        return track_im, full_bitmap, reward_bitmap
 
-        elif tile_geographic_index == "bottom_right":
-            # the whole right part of the bottom right tile
-            # every y location and the rightmost x location
-            terminal_region = np.s_[y_region, x_region.stop - 1]
-            done_bitmap[terminal_region] = 1
-
-        # else reward is 0
-
-        return done_bitmap
 
     def place_reward(self, reward_bitmap, tile_count, tile_region):
         """Add reward to the reward bitmap"""
-        tile_geographic_index = self.get_tile_geographic_index(tile_count)
         y_region, x_region = tile_region
-        if tile_geographic_index == "upper_left":
+        if tile_count == 0:
             reward = (4 if self.game_id == 0 else 0)
 
             # the whole left part of the upper left tile
@@ -235,7 +246,7 @@ class Track(object):
             reward_region = np.s_[y_region, x_region.start]
             reward_bitmap[reward_region] = reward
 
-        elif tile_geographic_index == "bottom_right":
+        elif tile_count == self.num_road_tiles - 1:
             reward = 2
 
             # the whole right part of the bottom right tile
@@ -246,19 +257,6 @@ class Track(object):
         # else reward is 0
 
         return reward_bitmap
-
-    def get_tile_geographic_index(self, tile_count):
-        """Get the general location (upper left, bottom right, somewhere in the middle)
-         of the tile based on how many tiles have been placed"""
-
-        if tile_count == 0:
-            tile_loc = "upper_left"
-        elif tile_count == self.num_road_tiles - 1:
-            tile_loc = "bottom_right"
-        else:
-            tile_loc = "middle_somewhere"
-
-        return tile_loc
 
     def get_tile_coordinates(self, bit_x, bit_y):
         """we place one tile per bit of the bitmap, so each time we increment
@@ -287,14 +285,17 @@ class Car(object):
         self.height = height
         self.size = (self.width, self.height)
         self.step_size = step_size
-        self.image = Image.open(str(IMAGE_DIR / Path("car.png"))).resize(self.size)
         self.track = track
+        self.image = Image.open(str(IMAGE_DIR / Path("car.png"))).resize(self.size)\
+                                    #.rotate((90 if self.track.track_pattern == "1" else 0))
+
         self.valid_locations = track.get_all_valid_locations_for_sprite(self.size)
         self.location = (0, 0)
 
     def reset(self, location):
         self.location = copy.deepcopy(location)
-        self.image = Image.open(str(IMAGE_DIR / Path("car.png"))).resize(self.size)
+        self.image = Image.open(str(IMAGE_DIR / Path("car.png"))).resize(self.size) \
+                                #.rotate((90 if self.track.track_pattern == "1" else 0))
 
     def _move(self, location, direction, step_size):
         cur_x, cur_y = location
@@ -342,16 +343,20 @@ class Car(object):
 
 
 class CarNav(gym.Env):
-    def __init__(self, width=256, height=256, step_size=10, reset_location="random", game_id=0):
+    def __init__(self, width=256, height=256, step_size=10, reset_location="random", game_id=0, pattern="2"):
         self.width = width
         self.height = height
         self.game_id = game_id
         self.reset_location = reset_location
 
-        self.track = Track(width, height, game_id=game_id)
+        self.track = Track(width, height, game_id=game_id, track_pattern=pattern)
 
-        # make car half the size of each road tile which is the size observation size / 8
-        car_width, car_height = self.track.road_tile_width // 2, self.track.road_tile_height // 2
+        if pattern == "2":
+            # make car half the size of each road tile which is the size observation size / 8
+            car_width, car_height = self.track.road_tile_width // 2, self.track.road_tile_height // 2
+        else:
+            car_width, car_height = self.track.road_tile_width, self.track.road_tile_height
+
         self.car = Car(self.track, width=car_width, height=car_height, step_size=step_size)
 
         self.action_space = gym.spaces.Discrete(4)
@@ -415,7 +420,7 @@ if __name__ == "__main__":
 
     actions = [RIGHT, RIGHT, RIGHT, RIGHT, RIGHT, UP, UP, LEFT, LEFT, LEFT, LEFT, LEFT, LEFT, LEFT]
 
-    env = CarNav(step_size=32)
+    env = CarNav(step_size=32, pattern="-")
 
     obs = env.reset()
     plt.imshow(obs)
