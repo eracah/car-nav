@@ -343,7 +343,7 @@ class Car(object):
 
 
 class CarNav(gym.Env):
-    def __init__(self, width=256, height=256, step_size=10, reset_location="random", game_id=0, pattern="2"):
+    def __init__(self, width=64, height=64, step_size=5, reset_location="random", game_id=0, pattern="-"):
         self.width = width
         self.height = height
         self.game_id = game_id
